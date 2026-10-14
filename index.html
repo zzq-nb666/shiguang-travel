@@ -151,6 +151,15 @@
         </div>
       </div>
       <div class="field">
+        <label>旅行人数</label>
+        <div class="stepper">
+          <button type="button" class="step-btn" id="people-minus">−</button>
+          <input type="number" id="people-input" min="1" max="20" value="1" inputmode="numeric">
+          <button type="button" class="step-btn" id="people-plus">+</button>
+          <span class="step-unit">人</span>
+        </div>
+      </div>
+      <div class="field">
         <label>人均总预算（元）</label>
         <div class="range-box">
           <div class="range-track" id="budget-track">
@@ -410,6 +419,28 @@
     if(e.key === 'Enter'){ e.preventDefault(); getDays(); }
   });
 
+  // 人数拨盘
+  var peopleInput = document.getElementById('people-input');
+  var peopleMinus = document.getElementById('people-minus');
+  var peoplePlus = document.getElementById('people-plus');
+  function getPeople(){
+    var v = parseInt(peopleInput.value, 10);
+    if(isNaN(v) || v < 1) v = 1;
+    if(v > 20) v = 20;
+    peopleInput.value = v;
+    return v;
+  }
+  peopleMinus.addEventListener('click', function(){
+    var v = getPeople() - 1; if(v < 1) v = 1; peopleInput.value = v;
+  });
+  peoplePlus.addEventListener('click', function(){
+    var v = getPeople() + 1; if(v > 20) v = 20; peopleInput.value = v;
+  });
+  peopleInput.addEventListener('blur', getPeople);
+  peopleInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); getPeople(); }
+  });
+
   var budgetRange = makeRange({
     track:'budget-track', fill:'budget-fill', thumbMin:'budget-thumb-min', thumbMax:'budget-thumb-max', valEl:'budget-val',
     min:500, max:20000, initMin:2000, initMax:5000, gap:0, step:100,
@@ -436,6 +467,7 @@
     if(!dest){ showError('请先填写目的地'); document.getElementById('dest').focus(); return; }
     var daysMin = getDays();
     var days = daysMin + ' 天';
+    var people = getPeople();
     var budgetLow = budgetRange.vmin;
     var budgetHigh = budgetRange.vmax;
     var flightCost = document.getElementById('flight-cost').value.trim();
@@ -471,6 +503,7 @@
     var userPrompt = '请为以下旅行需求设计一份分天行程：\n' +
       '- 目的地：' + dest + '\n' +
       '- 天数：' + days + '\n' +
+      '- 旅行人数：' + people + ' 人（预算为"人均"，总花费需按人数换算；住宿建议按人数说明房间数/床位数；交通上，1-2 人打车划算，3 人以上优先公交/地铁或包车；行程节奏要考虑多人同行、有老有小的实际情况）\n' +
       '- 人均总预算：' + budgetLow + ' ~ ' + budgetHigh + ' 元（含往返大交通和全程酒店，先扣机酒再分配剩余）\n' +
       (flightCost ? '- 往返大交通：' + flightCost + ' 元/人（固定，从总预算扣除）\n' : '') +
       (hotelCost ? '- 住宿预算：' + hotelCost + ' 元/人（固定，从总预算扣除）\n' : '') +
