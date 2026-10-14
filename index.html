@@ -160,7 +160,7 @@
         </div>
       </div>
       <div class="field">
-        <label>人均总预算（元）</label>
+        <label>人均预算（元）</label>
         <div class="range-box">
           <div class="range-track" id="budget-track">
             <div class="range-fill" id="budget-fill"></div>
@@ -169,7 +169,7 @@
           </div>
           <div class="range-val" id="budget-val"></div>
         </div>
-        <div class="range-hint">含机票/车票 + 酒店 + 当地吃喝玩乐 · 两端可重合表示固定金额</div>
+        <div class="range-hint">一个人为这趟旅行准备的钱（含机票/车票 + 酒店 + 吃喝玩乐）· 两端可重合表示固定金额</div>
       </div>
       <div class="field">
         <label>往返大交通（元/人，可选）</label>
@@ -503,8 +503,8 @@
     var userPrompt = '请为以下旅行需求设计一份分天行程：\n' +
       '- 目的地：' + dest + '\n' +
       '- 天数：' + days + '\n' +
-      '- 旅行人数：' + people + ' 人（预算为"人均"，总花费需按人数换算；住宿建议按人数说明房间数/床位数；交通上，1-2 人打车划算，3 人以上优先公交/地铁或包车；行程节奏要考虑多人同行、有老有小的实际情况）\n' +
-      '- 人均总预算：' + budgetLow + ' ~ ' + budgetHigh + ' 元（含往返大交通和全程酒店，先扣机酒再分配剩余）\n' +
+      '- 旅行人数：' + people + ' 人（预算仍按"人均"计，即单个人这次旅行花的钱；人数只影响住宿房间数/床位数、交通方式——1-2 人打车划算、3 人以上优先公交/地铁或包车、以及多人同行时的行程节奏）\n' +
+      '- 人均预算：' + budgetLow + ' ~ ' + budgetHigh + ' 元（一个人为这次旅行准备的钱，含往返大交通和全程酒店，先扣机酒再分配剩余）\n' +
       (flightCost ? '- 往返大交通：' + flightCost + ' 元/人（固定，从总预算扣除）\n' : '') +
       (hotelCost ? '- 住宿预算：' + hotelCost + ' 元/人（固定，从总预算扣除）\n' : '') +
       '- 出行方式：' + transport + '\n' +
@@ -513,7 +513,7 @@
       (xhs ? '- 小红书攻略参考：' + xhs + '（若为链接无法读取正文，请基于目的地常识补全；剔除「必打卡」「绝绝子」等软广，只采纳有具体地点/时间/价格的信息）\n' : '') +
       (extra ? '- 补充说明：' + extra + '\n' : '') +
       '\n输出以下 JSON（不要多余内容）：\n' +
-      '{"summary":"一句话主题","budget_estimate":"总花费拆解：大交通约X+住宿约X+餐饮门票约X",' +
+      '{"summary":"一句话主题","budget_estimate":"人均花费拆解（按单个人计算）：大交通约X+住宿约X+餐饮门票约X",' +
       '"start_point":"第一天行程的起始点（如：成都东站/双流机场/酒店，即用户抵达目的地后开始游玩的第一个地点）",' +
       '"end_point":"最后一天行程的结束点（如：返程出发的火车站/机场/酒店）",' +
       '"days":[{"day":1,"theme":"当天主题","spots":[{"time":"09:00","name":"景点/活动名","desc":"一句话说明","tag":"美食/景点/交通","lng":经度数字,"lat":纬度数字}]}],' +
@@ -624,7 +624,7 @@
 
     if(data.budget_estimate){
       budgetBar.style.display = 'block';
-      budgetBar.innerHTML = '💰 全程人均预估总花费：<b>' + esc(data.budget_estimate) + '</b>';
+      budgetBar.innerHTML = '💰 人均预算：<b>' + esc(data.budget_estimate) + '</b>';
     }
     if(data.summary){
       var s = document.createElement('div');
