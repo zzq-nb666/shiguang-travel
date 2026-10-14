@@ -68,6 +68,7 @@
   .spot-name{font-weight:600;font-size:14px;}
   .spot-desc{font-size:13px;color:var(--sub);margin-top:2px;}
   .spot-tag{font-size:11px;color:var(--gold);background:#faf3e3;border-radius:5px;padding:1px 7px;margin-left:6px;font-weight:600;}
+  .spot-miss{font-size:11px;color:#b91c1c;background:#fee2e2;border-radius:5px;padding:1px 6px;margin-left:6px;font-weight:600;}
   .budget-bar{background:var(--accent-soft);border:1px solid #dbe6fb;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13.5px;color:#374151;}
   .budget-bar b{color:var(--accent);}
   .empty-state{text-align:center;padding:50px 20px;color:#9aa1ab;}
@@ -518,7 +519,7 @@
       '"end_point":"最后一天行程的结束点（如：返程出发的火车站/机场/酒店）",' +
       '"days":[{"day":1,"theme":"当天主题","spots":[{"time":"09:00","name":"景点/活动名","desc":"一句话说明","tag":"美食/景点/交通","lng":经度数字,"lat":纬度数字}]}],' +
       '"hotels":[{"area":"住宿区域","reason":"选择理由","price":"参考价格","tip":"选房建议"}]}\n' +
-      '硬性要求：① 严格以用户需求为准——天数、人数、预算、出行方式、行程节奏、偏好、机酒金额、补充说明都必须如实落实到路线中，不得擅自更改或忽略任何一项；用户明确提的要求优先于通用旅行常识。② 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。③ 全程景点、餐厅、美食不得重复出现。④ 景点要真实存在，desc 15 字内。⑤【住宿核心规则】住宿要按全程动线综合考虑、只推荐 1-3 个住宿区域：第一天抵达后先前往住宿区域放下行李再开始游玩；从第 2 天起，每天的第一个行程点就是"从住宿酒店出发"，即每天起点都设在酒店/住宿区域，白天游玩结束后回到酒店。住宿区域要选在当天及次日景点集中的位置，尽量减少每天往返酒店的折返；若该城市有地铁线，住宿优先选靠近地铁站、且沿线能直达主要景点的位置，并注明最近的地铁站。自驾/租车则优先停车方便或近高速口。⑥ 必须给出 start_point（第一天起点，即抵达的交通枢纽如机场/火车站）和 end_point（最后一天终点，即返程出发的枢纽或最后停留点），这是行程的落地起止点。⑦【不走回头路】每天从酒店出发后的所有游玩点必须沿同一方向顺路安排，按地理相邻/顺路顺序串联，一路向下一个方向推进，严禁东一个西一个来回折返；相邻两个点之间尽量就近，确保整条动线是单向顺路的。⑧ 每个 spot 必须带 lng/lat 经纬度（中国境内用 GCJ-02 火星坐标），前端会用高德地名检索逐点校准坐标，因此 name 必须使用官方标准地名（如「星海广场」），不要加修饰词或俗称，否则检索不到。';
+      '硬性要求：① 严格以用户需求为准——天数、人数、预算、出行方式、行程节奏、偏好、机酒金额、补充说明都必须如实落实到路线中，不得擅自更改或忽略任何一项；用户明确提的要求优先于通用旅行常识。② 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。③ 全程景点、餐厅、美食不得重复出现。④ 景点要真实存在，desc 15 字内。⑤【住宿核心规则】住宿要按全程动线综合考虑、只推荐 1-3 个住宿区域：第一天抵达后先前往住宿区域放下行李再开始游玩；从第 2 天起，每天的第一个行程点就是"从住宿酒店出发"，即每天起点都设在酒店/住宿区域，白天游玩结束后回到酒店。住宿区域要选在当天及次日景点集中的位置，尽量减少每天往返酒店的折返；若该城市有地铁线，住宿优先选靠近地铁站、且沿线能直达主要景点的位置，并注明最近的地铁站。自驾/租车则优先停车方便或近高速口。⑥ 必须给出 start_point（第一天起点，即抵达的交通枢纽如机场/火车站）和 end_point（最后一天终点，即返程出发的枢纽或最后停留点），这是行程的落地起止点。⑦【不走回头路】每天从酒店出发后的所有游玩点必须沿同一方向顺路安排，按地理相邻/顺路顺序串联，一路向下一个方向推进，严禁东一个西一个来回折返；相邻两个点之间尽量就近，确保整条动线是单向顺路的。⑧ 每个 spot 的 name 必须使用官方标准地名（如「星海广场」，不要写成「超级好看的星海湾」这类带修饰词或俗称的名字），因为地图坐标由前端用高德地名检索实时定位，名字不标准会检索不到。lng/lat 字段可随便填占位数字（前端会忽略并用高德真实坐标覆盖）。';
 
     var controller = new AbortController();
     var fullText = '';
@@ -598,50 +599,74 @@
     if(e.key === 'Enter'){ e.preventDefault(); adjustBtn.click(); }
   });
 
-  // ===== 高德 POI 检索：校准 AI 给的经纬度 =====
-  // AI 直接背坐标不准（会定位到海里），这里逐点用高德地名检索取真实 GCJ-02 坐标
-  async function geocodePoi(name, city){
+  // ===== 坐标定位：用高德 JS API 的 PlaceSearch 插件检索真实坐标 =====
+  // AI 直接背坐标不可靠（会飘到海里）。改用 AMap.PlaceSearch（与地图 key 同平台，
+  // 不依赖 Web服务 key，避免 USERKEY_PLAT_NOMATCH 报错）。
+  // 查不到返回 null（由调用方标记为未定位），绝不回退到 AI 坐标。
+
+  // 确保 PlaceSearch 插件已加载
+  function loadPlaceSearch(cb){
+    if(!AMAP_KEY){ return; }
+    if(window.AMap && AMap.PlaceSearch){ cb && cb(); return; }
+    loadAmap(function(){
+      AMap.plugin('AMap.PlaceSearch', function(){ cb && cb(); });
+    });
+  }
+
+  function geocodePoi(name, city, cb){
     try{
-      var url = 'https://restapi.amap.com/v3/place/text?keywords=' + encodeURIComponent(name) +
-        '&city=' + encodeURIComponent(city) + '&citylimit=true&key=' + AMAP_KEY + '&offset=3&page=1';
-      var r = await fetch(url);
-      var j = await r.json();
-      if(j.status === '1' && j.pois && j.pois.length && j.pois[0].location){
-        var loc = j.pois[0].location.split(',');
-        var lng = parseFloat(loc[0]), lat = parseFloat(loc[1]);
-        if(!isNaN(lng) && !isNaN(lat)) return { lng: lng, lat: lat };
-      }
-    }catch(e){ /* 检索失败则保留 AI 原坐标 */ }
-    return null;
+      var ps = new AMap.PlaceSearch({
+        city: city,
+        citylimit: false,
+        pageSize: 5,
+        pageIndex: 1
+      });
+      ps.search(name, function(status, result){
+        if(status === 'complete' && result && result.poiList && result.poiList.pois && result.poiList.pois.length){
+          var loc = result.poiList.pois[0].location;
+          if(loc && !isNaN(loc.lng) && !isNaN(loc.lat)){
+            cb({ lng: loc.lng, lat: loc.lat });
+            return;
+          }
+        }
+        cb(null);
+      });
+    }catch(e){ cb(null); }
+  }
+
+  function locateOne(keyword, city){
+    return new Promise(function(resolve){
+      geocodePoi(keyword, city, function(loc){ resolve(loc); });
+    });
   }
 
   async function fixPlanCoords(data, dest){
     if(!AMAP_KEY || !dest) return;
+    // 先确保 PlaceSearch 插件就绪
+    await new Promise(function(resolve){ loadPlaceSearch(resolve); });
+    if(!window.AMap || !AMap.PlaceSearch) return;
+
+    // 坐标只信高德；AI 给的 lng/lat 先全部清空
     var jobs = [];
     (data.days || []).forEach(function(d){
       (d.spots || []).forEach(function(sp){
-        // 酒店类点没有固定 POI，单独处理
-        if(sp && sp.name && !/酒店|住宿/.test(sp.name)){
-          jobs.push({ sp: sp, name: sp.name });
-        }
+        if(!sp) return;
+        sp.lng = null; sp.lat = null; sp._located = false;
+        var isHotel = /酒店|住宿|客栈|民宿|青旅|宾馆/.test(sp.name || '');
+        if(isHotel){ sp._isHotel = true; return; }   // 酒店点不标坐标、不进地图
+        jobs.push({ sp: sp, keyword: sp.name || '' });
       });
     });
-    await Promise.all(jobs.map(async function(j){
-      var loc = await geocodePoi(j.name, dest);
-      if(loc){ j.sp.lng = loc.lng; j.sp.lat = loc.lat; }
-    }));
-    // 酒店类点（出发/返回酒店）：用当天第一个有效坐标近似（酒店就在当天动线上）
-    (data.days || []).forEach(function(d){
-      var first = null;
-      (d.spots || []).forEach(function(sp){
-        if(sp && sp.lng != null && sp.lat != null && first == null) first = sp;
-      });
-      (d.spots || []).forEach(function(sp){
-        if(sp && /酒店|住宿/.test(sp.name || '') && first){
-          sp.lng = first.lng; sp.lat = first.lat;
-        }
-      });
-    });
+    // 逐个串行检索，避免并发过多触发限流
+    for(var i=0;i<jobs.length;i++){
+      var j = jobs[i];
+      var loc = await locateOne(j.keyword, dest);
+      if(loc){
+        j.sp.lng = loc.lng;
+        j.sp.lat = loc.lat;
+        j.sp._located = true;
+      }
+    }
   }
 
   async function renderResult(raw, dest, days){
@@ -696,14 +721,16 @@
       var html = '<div class="day-head"><span class="day-num">第 ' + d.day + ' 天</span>' +
         '<span class="day-theme">' + esc(d.theme || '') + '</span></div>';
       (d.spots || []).forEach(function(sp){
+        var isHotel = (sp && sp._isHotel === true);
+        var miss = (!isHotel && sp && sp._located !== true) ? '<span class="spot-miss">未定位</span>' : '';
         html += '<div class="spot"><span class="spot-time">' + esc(sp.time || '') + '</span>' +
           '<div><div class="spot-name">' + esc(sp.name || '') +
-          (sp.tag ? '<span class="spot-tag">' + esc(sp.tag) + '</span>' : '') + '</div>' +
+          (sp.tag ? '<span class="spot-tag">' + esc(sp.tag) + '</span>' : '') + miss + '</div>' +
           (sp.desc ? '<div class="spot-desc">' + esc(sp.desc) + '</div>' : '') + '</div></div>';
       });
-      // 地图路线图（每个有效坐标的 spot 才画）
-      var hasCoord = (d.spots || []).some(function(sp){ return sp && (sp.lng != null) && (sp.lat != null); });
-      if(hasCoord){
+      // 地图只画高德已定位的点，未定位的一律不画、不瞎标
+      var located = (d.spots || []).filter(function(sp){ return sp && sp._located === true && sp.lng != null && sp.lat != null; });
+      if(located.length >= 2){
         html += '<div class="map-wrap"><div class="map-head">🗺️ 第 ' + d.day + ' 天路线图</div>' +
           '<div class="map-box" id="map-' + d.day + '"></div>' +
           '<div class="map-hint" id="map-hint-' + d.day + '"></div></div>';
@@ -711,7 +738,7 @@
       html += '</div>';
       block.innerHTML = html;
       resultBody.appendChild(block);
-      if(hasCoord){ renderDayMap(d, dest); }
+      if(located.length >= 2){ renderDayMap(d, dest); }
     });
 
     // 酒店推荐区
@@ -769,19 +796,19 @@
     if(amapLoading){ setTimeout(function(){ loadAmap(cb); }, 200); return; }
     amapLoading = true;
     var s = document.createElement('script');
-    s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + AMAP_KEY;
+    s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + AMAP_KEY + '&plugin=AMap.PlaceSearch';
     s.onload = function(){ amapReady = true; amapLoading = false; cb && cb(); };
     s.onerror = function(){ amapLoading = false; };
     document.head.appendChild(s);
   }
 
-  // 画某一天的路线图
+  // 画某一天的路线图（只画高德已定位的点）
   function renderDayMap(d, dest){
     if(!AMAP_KEY){ return; }
     loadAmap(function(){
       try{
-        var spots = (d.spots || []).filter(function(sp){ return sp && (sp.lng != null) && (sp.lat != null); });
-        if(!spots.length) return;
+        var spots = (d.spots || []).filter(function(sp){ return sp && sp._located === true && (sp.lng != null) && (sp.lat != null); });
+        if(spots.length < 2) return;
         var box = document.getElementById('map-' + d.day);
         if(!box) return;
         var map = new AMap.Map(box, { zoom: 12, resizeEnable: true });
