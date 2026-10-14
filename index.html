@@ -175,10 +175,6 @@
           <option value="打车为主">打车为主</option>
         </select>
       </div>
-      <div class="field">
-        <label>出发/到达站点（可选）</label>
-        <input id="depart-station" placeholder="如：沈阳北站、成都东站">
-      </div>
       <div class="field full">
         <label>行程节奏</label>
         <div class="chip-group" id="pace-group">
@@ -427,7 +423,6 @@
     var flightCost = document.getElementById('flight-cost').value.trim();
     var hotelCost = document.getElementById('hotel-cost').value.trim();
     var transport = document.getElementById('transport').value;
-    var departStation = document.getElementById('depart-station').value.trim();
     var pace = getPace();
     var prefs = getPrefs();
     var xhs = document.getElementById('xiaohongshu').value.trim();
@@ -462,16 +457,17 @@
       (flightCost ? '- 往返大交通：' + flightCost + ' 元/人（固定，从总预算扣除）\n' : '') +
       (hotelCost ? '- 住宿预算：' + hotelCost + ' 元/人（固定，从总预算扣除）\n' : '') +
       '- 出行方式：' + transport + '\n' +
-      (departStation ? '- 出发/到达站点：' + departStation + '（行程起点就从这里开始规划）\n' : '') +
       '- 行程节奏：' + pace + '\n' +
       '- 偏好：' + (prefs.length ? prefs.join('、') : '无特殊偏好') + '\n' +
       (xhs ? '- 小红书攻略参考：' + xhs + '（若为链接无法读取正文，请基于目的地常识补全；剔除「必打卡」「绝绝子」等软广，只采纳有具体地点/时间/价格的信息）\n' : '') +
       (extra ? '- 补充说明：' + extra + '\n' : '') +
       '\n输出以下 JSON（不要多余内容）：\n' +
       '{"summary":"一句话主题","budget_estimate":"总花费拆解：大交通约X+住宿约X+餐饮门票约X",' +
+      '"start_point":"第一天行程的起始点（如：成都东站/双流机场/酒店，即用户抵达目的地后开始游玩的第一个地点）",' +
+      '"end_point":"最后一天行程的结束点（如：返程出发的火车站/机场/酒店）",' +
       '"days":[{"day":1,"theme":"当天主题","spots":[{"time":"09:00","name":"景点/活动名","desc":"一句话说明","tag":"美食/景点/交通"}]}],' +
       '"hotels":[{"area":"住宿区域","reason":"选择理由","price":"参考价格","tip":"选房建议"}]}\n' +
-      '硬性要求：① 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。② 全程景点、餐厅、美食不得重复出现。③ 景点要真实存在，desc 15 字内。④ 住宿按每晚活动集中地就近推荐 1-3 个区域；自驾/租车优先停车方便或近高速口。';
+      '硬性要求：① 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。② 全程景点、餐厅、美食不得重复出现。③ 景点要真实存在，desc 15 字内。④ 住宿按每晚活动集中地就近推荐 1-3 个区域；自驾/租车优先停车方便或近高速口。⑤ 必须给出 start_point（第一天起点）和 end_point（最后一天终点），这是行程的落地起止点。';
 
     var controller = new AbortController();
     var fullText = '';
@@ -529,6 +525,13 @@
       s.style.cssText = 'background:#fff7ed;border-color:#f0e0c0;color:#7c5a1a;';
       s.innerHTML = '🎯 ' + esc(data.summary);
       resultBody.appendChild(s);
+    }
+    if(data.start_point || data.end_point){
+      var sp = document.createElement('div');
+      sp.className = 'budget-bar';
+      sp.style.cssText = 'background:#eef6fb;border-color:#d3e6f5;color:#2a5a8a;';
+      sp.innerHTML = '📍 <b>起点</b>：' + esc(data.start_point || '（行程起点）') + '　<span style="color:#c9d4e0;">→</span>　<b>终点</b>：' + esc(data.end_point || '（行程终点）');
+      resultBody.appendChild(sp);
     }
 
     data.days.forEach(function(d){
