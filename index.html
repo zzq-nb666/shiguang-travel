@@ -115,6 +115,10 @@
   .otel-intl{margin-top:6px;padding-top:8px;border-top:1px dashed #e2e8f0;}
   .otel-btn{display:inline-flex;align-items:center;font-size:12px;font-weight:600;color:var(--accent);background:#fff;border:1px solid #c9d9f2;border-radius:7px;padding:4px 11px;text-decoration:none;transition:all .15s;}
   .otel-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .map-wrap{margin-top:12px;border:1px solid var(--line);border-radius:11px;overflow:hidden;}
+  .map-head{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#374151;padding:9px 14px;background:#f7f9fc;border-bottom:1px solid var(--line);}
+  .map-box{width:100%;height:260px;background:#eef1f5;}
+  .map-hint{font-size:12px;color:#9aa1ab;padding:8px 14px;background:#fff;border-top:1px dashed var(--line);}
   @media(max-width:640px){
     .form-grid{grid-template-columns:1fr;}
     .field.full{grid-column:1;}
@@ -215,6 +219,12 @@
     </div>
     <div class="error-box" id="error-box"></div>
     <div class="budget-bar" id="budget-bar" style="display:none;"></div>
+    <div id="adjust-box" style="display:none;">
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <input id="adjust-input" placeholder="对这份攻略提要求，如：第二天换成公园、删掉第三天、加一个看夜景、预算再省点…" style="flex:1;border:1px solid #d3dbe6;border-radius:9px;padding:10px 12px;font-size:14px;font-family:inherit;color:var(--ink);background:#fbfcfe;outline:none;">
+        <button class="btn btn-primary" id="adjust-btn" style="width:auto;padding:0 18px;white-space:nowrap;">调整攻略</button>
+      </div>
+    </div>
     <div id="result-body"></div>
     <div class="loading" id="loading">
       <div class="spinner"></div>
@@ -238,6 +248,9 @@
     oauthRelayBaseUrl: 'https://www.workbuddy.cn/v2/as/genie-baas/oauth',
     publishableKey: 'wbpk_Clyial121TrkWNpX7oTP82_OuRc162Qka2KAruV8zD1qpzAgZaqQ6CD'
   };
+
+  // 高德地图 Web 服务 Key
+  var AMAP_KEY = 'd42db26868fcfa6214ac6ccea3dbaf29';
 
   var cloud = null;
   var modelId = null;
@@ -413,6 +426,11 @@
   var budgetBar = document.getElementById('budget-bar');
   var resultMeta = document.getElementById('result-meta');
 
+  // 当前行程数据（用于二次调整）
+  var currentPlan = null;
+  var currentDest = '';
+  var currentDays = '';
+
   genBtn.addEventListener('click', async function(){
     var dest = document.getElementById('dest').value.trim();
     if(!dest){ showError('请先填写目的地'); document.getElementById('dest').focus(); return; }
@@ -465,9 +483,9 @@
       '{"summary":"一句话主题","budget_estimate":"总花费拆解：大交通约X+住宿约X+餐饮门票约X",' +
       '"start_point":"第一天行程的起始点（如：成都东站/双流机场/酒店，即用户抵达目的地后开始游玩的第一个地点）",' +
       '"end_point":"最后一天行程的结束点（如：返程出发的火车站/机场/酒店）",' +
-      '"days":[{"day":1,"theme":"当天主题","spots":[{"time":"09:00","name":"景点/活动名","desc":"一句话说明","tag":"美食/景点/交通"}]}],' +
+      '"days":[{"day":1,"theme":"当天主题","spots":[{"time":"09:00","name":"景点/活动名","desc":"一句话说明","tag":"美食/景点/交通","lng":经度数字,"lat":纬度数字}]}],' +
       '"hotels":[{"area":"住宿区域","reason":"选择理由","price":"参考价格","tip":"选房建议"}]}\n' +
-      '硬性要求：① 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。② 全程景点、餐厅、美食不得重复出现。③ 景点要真实存在，desc 15 字内。④ 住宿按每晚活动集中地就近推荐 1-3 个区域；自驾/租车优先停车方便或近高速口。⑤ 必须给出 start_point（第一天起点）和 end_point（最后一天终点），这是行程的落地起止点。';
+      '硬性要求：① 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。② 全程景点、餐厅、美食不得重复出现。③ 景点要真实存在，desc 15 字内。④ 住宿按每晚活动集中地就近推荐 1-3 个区域；自驾/租车优先停车方便或近高速口。⑤ 必须给出 start_point（第一天起点）和 end_point（最后一天终点），这是行程的落地起止点。⑥【不走回头路】每天的所有行程点必须沿同一方向顺路安排，按地理相邻/顺路顺序串联，从当天起点一路向下一个方向推进，严禁东一个西一个来回折返；相邻两个点之间尽量就近，确保整条动线是单向顺路的。⑦ 每个 spot 必须带 lng/lat 经纬度（中国境内用 GCJ-02 火星坐标，保留 6 位小数），用于地图标注路线。';
 
     var controller = new AbortController();
     var fullText = '';
@@ -498,6 +516,55 @@
     }
   });
 
+  // 二次调整攻略
+  var adjustBtn = document.getElementById('adjust-btn');
+  var adjustInput = document.getElementById('adjust-input');
+  adjustBtn.addEventListener('click', async function(){
+    var req = adjustInput.value.trim();
+    if(!req){ adjustInput.focus(); return; }
+    if(!currentPlan){
+      showError('请先生成一份攻略再调整');
+      return;
+    }
+    adjustBtn.disabled = true;
+    adjustBtn.textContent = '调整中…';
+    var systemPrompt = '你是旅行规划师，根据用户对现有攻略提出的修改要求，在原有行程基础上做精准的局部调整，其他部分保持不变。只输出 JSON，不要输出其他文字。';
+    var userPrompt = '以下是当前攻略 JSON：\n' + JSON.stringify(currentPlan) + '\n\n' +
+      '用户希望做如下调整：' + req + '\n\n' +
+      '请按相同 JSON 结构返回调整后的完整攻略（保持 summary/budget_estimate/start_point/end_point/days/hotels 字段结构一致，每个 spot 仍带 lng/lat 经纬度）。' +
+      '注意：调整后仍需满足"每天行程点沿同一方向顺路、不走回头路、全程景点美食不重复"。只改动用户要求的部分，其余保持原样。';
+    var fullText = '';
+    try{
+      for await (var chunk of cloud.llm.chat.completions.create({
+        model: modelId,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        stream: true,
+        response_format: { type: 'json_object' }
+      })){
+        var delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+        if(delta && delta.content){ fullText += delta.content; }
+      }
+      // 清空结果区重新渲染
+      resultBody.innerHTML = '';
+      budgetBar.style.display = 'none';
+      errorBox.classList.remove('show');
+      renderResult(fullText, currentDest, currentDays);
+    }catch(err){
+      console.error(err);
+      showError('调整失败：' + (err && err.message ? err.message : '网络或服务异常，请重试'));
+    }finally{
+      adjustBtn.disabled = false;
+      adjustBtn.textContent = '调整攻略';
+      adjustInput.value = '';
+    }
+  });
+  adjustInput.addEventListener('keydown', function(e){
+    if(e.key === 'Enter'){ e.preventDefault(); adjustBtn.click(); }
+  });
+
   function renderResult(raw, dest, days){
     var data;
     try{
@@ -512,6 +579,13 @@
       showError('AI 返回的行程为空，请重新生成');
       return;
     }
+
+    // 保存当前行程，供二次调整使用
+    currentPlan = data;
+    currentDest = dest;
+    currentDays = days;
+    var adjustBox = document.getElementById('adjust-box');
+    if(adjustBox){ adjustBox.style.display = 'block'; }
 
     resultMeta.textContent = dest + ' · ' + days + ' 天行程';
 
@@ -545,9 +619,17 @@
           (sp.tag ? '<span class="spot-tag">' + esc(sp.tag) + '</span>' : '') + '</div>' +
           (sp.desc ? '<div class="spot-desc">' + esc(sp.desc) + '</div>' : '') + '</div></div>';
       });
+      // 地图路线图（每个有效坐标的 spot 才画）
+      var hasCoord = (d.spots || []).some(function(sp){ return sp && (sp.lng != null) && (sp.lat != null); });
+      if(hasCoord){
+        html += '<div class="map-wrap"><div class="map-head">🗺️ 第 ' + d.day + ' 天路线图（单向顺路，不走回头路）</div>' +
+          '<div class="map-box" id="map-' + d.day + '"></div>' +
+          '<div class="map-hint" id="map-hint-' + d.day + '"></div></div>';
+      }
       html += '</div>';
       block.innerHTML = html;
       resultBody.appendChild(block);
+      if(hasCoord){ renderDayMap(d, dest); }
     });
 
     // 酒店推荐区
@@ -594,6 +676,48 @@
       });
       resultBody.appendChild(hw);
     }
+  }
+
+  // 高德地图：加载 SDK（动态注入，避免阻塞首屏）
+  var amapReady = false;
+  var amapLoading = false;
+  function loadAmap(cb){
+    if(!AMAP_KEY){ return; }
+    if(amapReady){ cb && cb(); return; }
+    if(amapLoading){ setTimeout(function(){ loadAmap(cb); }, 200); return; }
+    amapLoading = true;
+    var s = document.createElement('script');
+    s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + AMAP_KEY;
+    s.onload = function(){ amapReady = true; amapLoading = false; cb && cb(); };
+    s.onerror = function(){ amapLoading = false; };
+    document.head.appendChild(s);
+  }
+
+  // 画某一天的路线图
+  function renderDayMap(d, dest){
+    if(!AMAP_KEY){ return; }
+    loadAmap(function(){
+      try{
+        var spots = (d.spots || []).filter(function(sp){ return sp && (sp.lng != null) && (sp.lat != null); });
+        if(!spots.length) return;
+        var box = document.getElementById('map-' + d.day);
+        if(!box) return;
+        var map = new AMap.Map(box, { zoom: 12, resizeEnable: true });
+        var path = spots.map(function(sp){ return [sp.lng, sp.lat]; });
+        var points = path.map(function(p, i){
+          return new AMap.Marker({ position: p, content: '<div style="background:#2f6fed;color:#fff;border-radius:50%;width:20px;height:20px;line-height:20px;text-align:center;font-size:11px;font-weight:700;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.3);">' + (i+1) + '</div>', offset: new AMap.Pixel(-10,-10) });
+        });
+        map.add(points);
+        var line = new AMap.Polyline({ path: path, strokeColor: '#2f6fed', strokeWeight: 4, strokeOpacity: 0.9, strokeStyle: 'solid', showDir: true });
+        map.add(line);
+        map.setFitView(null, false, [80, 80, 80, 80]);
+        var hint = document.getElementById('map-hint-' + d.day);
+        if(hint){
+          var names = spots.map(function(sp){ return sp.name; }).join(' → ');
+          hint.textContent = '路线顺序：' + names;
+        }
+      }catch(e){ console.error('地图渲染失败', e); }
+    });
   }
 
   function showError(msg){
