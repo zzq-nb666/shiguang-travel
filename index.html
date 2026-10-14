@@ -518,7 +518,7 @@
       '"end_point":"最后一天行程的结束点（如：返程出发的火车站/机场/酒店）",' +
       '"days":[{"day":1,"theme":"当天主题","spots":[{"time":"09:00","name":"景点/活动名","desc":"一句话说明","tag":"美食/景点/交通","lng":经度数字,"lat":纬度数字}]}],' +
       '"hotels":[{"area":"住宿区域","reason":"选择理由","price":"参考价格","tip":"选房建议"}]}\n' +
-      '硬性要求：① 严格以用户需求为准——天数、人数、预算、出行方式、行程节奏、偏好、机酒金额、补充说明都必须如实落实到路线中，不得擅自更改或忽略任何一项；用户明确提的要求优先于通用旅行常识。② 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。③ 全程景点、餐厅、美食不得重复出现。④ 景点要真实存在，desc 15 字内。⑤【住宿核心规则】住宿要按全程动线综合考虑、只推荐 1-3 个住宿区域：第一天抵达后先前往住宿区域放下行李再开始游玩；从第 2 天起，每天的第一个行程点就是"从住宿酒店出发"，即每天起点都设在酒店/住宿区域，白天游玩结束后回到酒店。住宿区域要选在当天及次日景点集中的位置，尽量减少每天往返酒店的折返；若该城市有地铁线，住宿优先选靠近地铁站、且沿线能直达主要景点的位置，并注明最近的地铁站。自驾/租车则优先停车方便或近高速口。⑥ 必须给出 start_point（第一天起点，即抵达的交通枢纽如机场/火车站）和 end_point（最后一天终点，即返程出发的枢纽或最后停留点），这是行程的落地起止点。⑦【不走回头路】每天从酒店出发后的所有游玩点必须沿同一方向顺路安排，按地理相邻/顺路顺序串联，一路向下一个方向推进，严禁东一个西一个来回折返；相邻两个点之间尽量就近，确保整条动线是单向顺路的。⑧ 每个 spot 必须带 lng/lat 经纬度（中国境内用 GCJ-02 火星坐标，保留 6 位小数），用于地图标注路线。';
+      '硬性要求：① 严格以用户需求为准——天数、人数、预算、出行方式、行程节奏、偏好、机酒金额、补充说明都必须如实落实到路线中，不得擅自更改或忽略任何一项；用户明确提的要求优先于通用旅行常识。② 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。③ 全程景点、餐厅、美食不得重复出现。④ 景点要真实存在，desc 15 字内。⑤【住宿核心规则】住宿要按全程动线综合考虑、只推荐 1-3 个住宿区域：第一天抵达后先前往住宿区域放下行李再开始游玩；从第 2 天起，每天的第一个行程点就是"从住宿酒店出发"，即每天起点都设在酒店/住宿区域，白天游玩结束后回到酒店。住宿区域要选在当天及次日景点集中的位置，尽量减少每天往返酒店的折返；若该城市有地铁线，住宿优先选靠近地铁站、且沿线能直达主要景点的位置，并注明最近的地铁站。自驾/租车则优先停车方便或近高速口。⑥ 必须给出 start_point（第一天起点，即抵达的交通枢纽如机场/火车站）和 end_point（最后一天终点，即返程出发的枢纽或最后停留点），这是行程的落地起止点。⑦【不走回头路】每天从酒店出发后的所有游玩点必须沿同一方向顺路安排，按地理相邻/顺路顺序串联，一路向下一个方向推进，严禁东一个西一个来回折返；相邻两个点之间尽量就近，确保整条动线是单向顺路的。⑧ 每个 spot 必须带 lng/lat 经纬度（中国境内用 GCJ-02 火星坐标），前端会用高德地名检索逐点校准坐标，因此 name 必须使用官方标准地名（如「星海广场」），不要加修饰词或俗称，否则检索不到。';
 
     var controller = new AbortController();
     var fullText = '';
@@ -598,7 +598,53 @@
     if(e.key === 'Enter'){ e.preventDefault(); adjustBtn.click(); }
   });
 
-  function renderResult(raw, dest, days){
+  // ===== 高德 POI 检索：校准 AI 给的经纬度 =====
+  // AI 直接背坐标不准（会定位到海里），这里逐点用高德地名检索取真实 GCJ-02 坐标
+  async function geocodePoi(name, city){
+    try{
+      var url = 'https://restapi.amap.com/v3/place/text?keywords=' + encodeURIComponent(name) +
+        '&city=' + encodeURIComponent(city) + '&citylimit=true&key=' + AMAP_KEY + '&offset=3&page=1';
+      var r = await fetch(url);
+      var j = await r.json();
+      if(j.status === '1' && j.pois && j.pois.length && j.pois[0].location){
+        var loc = j.pois[0].location.split(',');
+        var lng = parseFloat(loc[0]), lat = parseFloat(loc[1]);
+        if(!isNaN(lng) && !isNaN(lat)) return { lng: lng, lat: lat };
+      }
+    }catch(e){ /* 检索失败则保留 AI 原坐标 */ }
+    return null;
+  }
+
+  async function fixPlanCoords(data, dest){
+    if(!AMAP_KEY || !dest) return;
+    var jobs = [];
+    (data.days || []).forEach(function(d){
+      (d.spots || []).forEach(function(sp){
+        // 酒店类点没有固定 POI，单独处理
+        if(sp && sp.name && !/酒店|住宿/.test(sp.name)){
+          jobs.push({ sp: sp, name: sp.name });
+        }
+      });
+    });
+    await Promise.all(jobs.map(async function(j){
+      var loc = await geocodePoi(j.name, dest);
+      if(loc){ j.sp.lng = loc.lng; j.sp.lat = loc.lat; }
+    }));
+    // 酒店类点（出发/返回酒店）：用当天第一个有效坐标近似（酒店就在当天动线上）
+    (data.days || []).forEach(function(d){
+      var first = null;
+      (d.spots || []).forEach(function(sp){
+        if(sp && sp.lng != null && sp.lat != null && first == null) first = sp;
+      });
+      (d.spots || []).forEach(function(sp){
+        if(sp && /酒店|住宿/.test(sp.name || '') && first){
+          sp.lng = first.lng; sp.lat = first.lat;
+        }
+      });
+    });
+  }
+
+  async function renderResult(raw, dest, days){
     var data;
     try{
       // 去除可能的代码块包裹
@@ -612,6 +658,9 @@
       showError('AI 返回的行程为空，请重新生成');
       return;
     }
+
+    // 用高德 POI 检索校准坐标（AI 给的经纬度不准，以高德为准）
+    await fixPlanCoords(data, dest);
 
     // 保存当前行程，供二次调整使用
     currentPlan = data;
