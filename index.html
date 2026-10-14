@@ -259,8 +259,12 @@
     publishableKey: 'wbpk_Clyial121TrkWNpX7oTP82_OuRc162Qka2KAruV8zD1qpzAgZaqQ6CD'
   };
 
-  // 高德地图 Web 服务 Key
-  var AMAP_KEY = 'd42db26868fcfa6214ac6ccea3dbaf29';
+  // 高德地图 Key（两个用途分开）：
+  // AMAP_JS_KEY —— 地图显示（Web端 JS API）
+  // AMAP_REST_KEY —— 坐标检索（Web服务 REST 接口）
+  var AMAP_JS_KEY = 'd42db26868fcfa6214ac6ccea3dbaf29';
+  var AMAP_REST_KEY = '545dfc05e2dcfa9ef96cee58bfe05178';
+  var AMAP_KEY = AMAP_JS_KEY;   // 地图 SDK 加载用 JS key
 
   var cloud = null;
   var modelId = null;
@@ -599,53 +603,30 @@
     if(e.key === 'Enter'){ e.preventDefault(); adjustBtn.click(); }
   });
 
-  // ===== 坐标定位：用高德 JS API 的 PlaceSearch 插件检索真实坐标 =====
-  // AI 直接背坐标不可靠（会飘到海里）。改用 AMap.PlaceSearch（与地图 key 同平台，
-  // 不依赖 Web服务 key，避免 USERKEY_PLAT_NOMATCH 报错）。
+  // ===== 坐标定位：用高德 REST 检索真实坐标 =====
+  // AI 直接背坐标不可靠（会飘到海里）。这里逐点用高德地名检索取真实 GCJ-02 坐标。
   // 查不到返回 null（由调用方标记为未定位），绝不回退到 AI 坐标。
-
-  // 确保 PlaceSearch 插件已加载
-  function loadPlaceSearch(cb){
-    if(!AMAP_KEY){ return; }
-    if(window.AMap && AMap.PlaceSearch){ cb && cb(); return; }
-    loadAmap(function(){
-      AMap.plugin('AMap.PlaceSearch', function(){ cb && cb(); });
-    });
-  }
-
-  function geocodePoi(name, city, cb){
+  async function geocodePoi(name, city){
     try{
-      var ps = new AMap.PlaceSearch({
-        city: city,
-        citylimit: false,
-        pageSize: 5,
-        pageIndex: 1
-      });
-      ps.search(name, function(status, result){
-        if(status === 'complete' && result && result.poiList && result.poiList.pois && result.poiList.pois.length){
-          var loc = result.poiList.pois[0].location;
-          if(loc && !isNaN(loc.lng) && !isNaN(loc.lat)){
-            cb({ lng: loc.lng, lat: loc.lat });
-            return;
+      var url = 'https://restapi.amap.com/v3/place/text?keywords=' + encodeURIComponent(name) +
+        '&city=' + encodeURIComponent(city) + '&citylimit=false&key=' + AMAP_REST_KEY + '&offset=5&page=1';
+      var r = await fetch(url);
+      var j = await r.json();
+      if(j.status === '1' && j.pois && j.pois.length){
+        for(var i=0;i<j.pois.length;i++){
+          var loc = j.pois[i] && j.pois[i].location ? j.pois[i].location.split(',') : null;
+          if(loc){
+            var lng = parseFloat(loc[0]), lat = parseFloat(loc[1]);
+            if(!isNaN(lng) && !isNaN(lat)) return { lng: lng, lat: lat };
           }
         }
-        cb(null);
-      });
-    }catch(e){ cb(null); }
-  }
-
-  function locateOne(keyword, city){
-    return new Promise(function(resolve){
-      geocodePoi(keyword, city, function(loc){ resolve(loc); });
-    });
+      }
+    }catch(e){ /* 检索失败 */ }
+    return null;
   }
 
   async function fixPlanCoords(data, dest){
-    if(!AMAP_KEY || !dest) return;
-    // 先确保 PlaceSearch 插件就绪
-    await new Promise(function(resolve){ loadPlaceSearch(resolve); });
-    if(!window.AMap || !AMap.PlaceSearch) return;
-
+    if(!AMAP_REST_KEY || !dest) return;
     // 坐标只信高德；AI 给的 lng/lat 先全部清空
     var jobs = [];
     (data.days || []).forEach(function(d){
@@ -660,7 +641,7 @@
     // 逐个串行检索，避免并发过多触发限流
     for(var i=0;i<jobs.length;i++){
       var j = jobs[i];
-      var loc = await locateOne(j.keyword, dest);
+      var loc = await geocodePoi(j.keyword, dest);
       if(loc){
         j.sp.lng = loc.lng;
         j.sp.lat = loc.lat;
@@ -796,7 +777,7 @@
     if(amapLoading){ setTimeout(function(){ loadAmap(cb); }, 200); return; }
     amapLoading = true;
     var s = document.createElement('script');
-    s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + AMAP_KEY + '&plugin=AMap.PlaceSearch';
+    s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + AMAP_KEY;
     s.onload = function(){ amapReady = true; amapLoading = false; cb && cb(); };
     s.onerror = function(){ amapLoading = false; };
     document.head.appendChild(s);
