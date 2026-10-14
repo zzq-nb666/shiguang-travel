@@ -175,6 +175,17 @@
           <option value="打车为主">打车为主</option>
         </select>
       </div>
+      <div class="field">
+        <label>出发/到达站点（可选）</label>
+        <input id="depart-station" placeholder="如：沈阳北站、成都东站">
+      </div>
+      <div class="field full">
+        <label>行程节奏</label>
+        <div class="chip-group" id="pace-group">
+          <span class="chip on" data-v="紧凑高效">紧凑高效（特种兵式，打卡点多）</span>
+          <span class="chip" data-v="轻松慢游">轻松慢游（随心逛，留足休息）</span>
+        </div>
+      </div>
       <div class="field full">
         <label>旅行偏好（可多选）</label>
         <div class="chip-group" id="pref-group">
@@ -258,7 +269,9 @@
   async function loadModel(){
     try{
       var models = await cloud.llm.models.list();
-      var m = models.find(function(x){ return x.disabled !== true; });
+      // 优先选快模型：非 disabled，且优先排除纯推理模型（推理模型通常很慢）
+      var cands = models.filter(function(x){ return x.disabled !== true; });
+      var m = cands.find(function(x){ return x.supportsReasoning !== true && x.onlyReasoning !== true; }) || cands[0];
       if(m){ modelId = m.id; return true; }
       return false;
     }catch(e){
@@ -274,6 +287,20 @@
     if(!chip) return;
     chip.classList.toggle('on');
   });
+
+  // 行程节奏 chip（单选互斥）
+  var paceGroup = document.getElementById('pace-group');
+  paceGroup.addEventListener('click', function(e){
+    var chip = e.target.closest('.chip');
+    if(!chip) return;
+    var wasOn = chip.classList.contains('on');
+    paceGroup.querySelectorAll('.chip').forEach(function(c){ c.classList.remove('on'); });
+    if(!wasOn){ chip.classList.add('on'); }
+  });
+  function getPace(){
+    var on = paceGroup.querySelector('.chip.on');
+    return on ? on.getAttribute('data-v') : '紧凑高效';
+  }
 
   function getPrefs(){
     var arr = [];
@@ -400,6 +427,8 @@
     var flightCost = document.getElementById('flight-cost').value.trim();
     var hotelCost = document.getElementById('hotel-cost').value.trim();
     var transport = document.getElementById('transport').value;
+    var departStation = document.getElementById('depart-station').value.trim();
+    var pace = getPace();
     var prefs = getPrefs();
     var xhs = document.getElementById('xiaohongshu').value.trim();
     var extra = document.getElementById('extra').value.trim();
@@ -429,31 +458,20 @@
     var userPrompt = '请为以下旅行需求设计一份分天行程：\n' +
       '- 目的地：' + dest + '\n' +
       '- 天数：' + days + '\n' +
-      '- 人均总预算：' + budgetLow + ' ~ ' + budgetHigh + ' 元（这是整个行程的人均总预算，含往返大交通和全程酒店。规划时先扣除机酒这两项，剩余再分配到每天的餐饮、门票、交通、娱乐）\n' +
-      (flightCost ? '- 用户已填往返大交通：' + flightCost + ' 元/人（此为固定开销，直接从总预算中扣除）\n' : '- 往返大交通：用户未填写，请按目的地合理估算并在总预算中预留\n') +
-      (hotelCost ? '- 用户已填住宿预算：' + hotelCost + ' 元/人（此为固定开销，直接从总预算中扣除）\n' : '- 住宿预算：用户未填写，请按天数和住宿区域合理估算并在总预算中预留\n') +
+      '- 人均总预算：' + budgetLow + ' ~ ' + budgetHigh + ' 元（含往返大交通和全程酒店，先扣机酒再分配剩余）\n' +
+      (flightCost ? '- 往返大交通：' + flightCost + ' 元/人（固定，从总预算扣除）\n' : '') +
+      (hotelCost ? '- 住宿预算：' + hotelCost + ' 元/人（固定，从总预算扣除）\n' : '') +
       '- 出行方式：' + transport + '\n' +
+      (departStation ? '- 出发/到达站点：' + departStation + '（行程起点就从这里开始规划）\n' : '') +
+      '- 行程节奏：' + pace + '\n' +
       '- 偏好：' + (prefs.length ? prefs.join('、') : '无特殊偏好') + '\n' +
-      (xhs ? '- 小红书攻略参考：' + xhs + '\n（说明：用户可能直接粘贴了小红书链接而非正文，若仅为链接、无法读取其内容，请基于你对目的地的通用了解补全攻略，并在行程中体现小红书用户常推荐的玩法；若包含文字要点，请提取其中的真实信息。务必剔除明显是软广/探店广告的内容，如出现「必打卡」「绝绝子」「天花板」等夸大营销词，不要盲信，只采纳有具体地点、时间、价格等可核实信息的部分。）\n' : '') +
+      (xhs ? '- 小红书攻略参考：' + xhs + '（若为链接无法读取正文，请基于目的地常识补全；剔除「必打卡」「绝绝子」等软广，只采纳有具体地点/时间/价格的信息）\n' : '') +
       (extra ? '- 补充说明：' + extra + '\n' : '') +
-      '\n请严格按以下 JSON 结构输出（不要输出多余内容）：\n' +
-      '{\n' +
-      '  "summary": "一句话概括这次旅行的主题",\n' +
-      '  "budget_estimate": "全程人均预估总花费（元），并简要拆解为：大交通约X元 + 住宿约X元 + 餐饮门票等约X元",\n' +
-      '  "days": [\n' +
-      '    {\n' +
-      '      "day": 1,\n' +
-      '      "theme": "当天主题",\n' +
-      '      "spots": [\n' +
-      '        {"time": "09:00", "name": "景点/活动名", "desc": "一句话说明与建议", "tag": "类别（如美食/景点/交通）"}\n' +
-      '      ]\n' +
-      '    }\n' +
-      '  ],\n' +
-      '  "hotels": [\n' +
-      '    {"area": "推荐住宿区域（结合行程动线，如市中心/近机场/景区周边）", "reason": "为什么选这里（结合当天或整体路线说明）", "price": "预算区间内的参考价格", "tip": "选择建议（如交通便利/近地铁/安静）"}\n' +
-      '  ]\n' +
-      '}\n' +
-      '要求：每天安排 3-5 个行程点，时间从早到晚合理分布；景点要具体真实；结合偏好和预算；desc 控制在 30 字以内。hotels 数组请结合行程动线推荐 1-3 个住宿区域，按每晚活动集中地就近原则，注明预算档位与选择理由；若用户出行方式为自驾/租车，优先推荐停车方便或近高速口的区域。';
+      '\n输出以下 JSON（不要多余内容）：\n' +
+      '{"summary":"一句话主题","budget_estimate":"总花费拆解：大交通约X+住宿约X+餐饮门票约X",' +
+      '"days":[{"day":1,"theme":"当天主题","spots":[{"time":"09:00","name":"景点/活动名","desc":"一句话说明","tag":"美食/景点/交通"}]}],' +
+      '"hotels":[{"area":"住宿区域","reason":"选择理由","price":"参考价格","tip":"选房建议"}]}\n' +
+      '硬性要求：① 行程节奏' + pace + '——紧凑高效则每天 4-6 个点、时间排满；轻松慢游则每天 2-3 个点、留足休息。② 全程景点、餐厅、美食不得重复出现。③ 景点要真实存在，desc 15 字内。④ 住宿按每晚活动集中地就近推荐 1-3 个区域；自驾/租车优先停车方便或近高速口。';
 
     var controller = new AbortController();
     var fullText = '';
